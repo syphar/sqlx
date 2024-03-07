@@ -1,5 +1,10 @@
 use crate::connection::LogSettings;
-use std::time::Instant;
+use pin_project::{pin_project, pinned_drop};
+use std::{
+    pin::Pin,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 // Yes these look silly. `tracing` doesn't currently support dynamic levels
 // https://github.com/tokio-rs/tracing/issues/372
@@ -24,16 +29,32 @@ macro_rules! private_tracing_dynamic_enabled {
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! private_tracing_dynamic_event {
-    (target: $target:expr, $level:expr, $($args:tt)*) => {{
+macro_rules! private_tracing_dynamic_span {
+    (target: $target:expr, $level:expr, $name:expr, $($args:tt)*) => {{
         use ::tracing::Level;
 
         match $level {
-            Level::ERROR => ::tracing::event!(target: $target, Level::ERROR, $($args)*),
-            Level::WARN => ::tracing::event!(target: $target, Level::WARN, $($args)*),
-            Level::INFO => ::tracing::event!(target: $target, Level::INFO, $($args)*),
-            Level::DEBUG => ::tracing::event!(target: $target, Level::DEBUG, $($args)*),
-            Level::TRACE => ::tracing::event!(target: $target, Level::TRACE, $($args)*),
+            Level::ERROR => ::tracing::span!(target: $target, Level::ERROR, $name, $($args)*),
+            Level::WARN => ::tracing::span!(target: $target, Level::WARN, $name, $($args)*),
+            Level::INFO => ::tracing::span!(target: $target, Level::INFO, $name, $($args)*),
+            Level::DEBUG => ::tracing::span!(target: $target, Level::DEBUG, $name, $($args)*),
+            Level::TRACE => ::tracing::span!(target: $target, Level::TRACE, $name, $($args)*),
+        }
+    }};
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! private_tracing_dynamic_event {
+    (target: $target:expr, $level:expr, $($field:tt)*) => {{
+        use ::tracing::Level;
+
+        match $level {
+            Level::ERROR => ::tracing::event!(target: $target, Level::ERROR, $($field)*),
+            Level::WARN => ::tracing::event!(target: $target, Level::WARN, $($field)*),
+            Level::INFO => ::tracing::event!(target: $target, Level::INFO, $($field)*),
+            Level::DEBUG => ::tracing::event!(target: $target, Level::DEBUG, $($field)*),
+            Level::TRACE => ::tracing::event!(target: $target, Level::TRACE, $($field)*),
         }
     }};
 }
@@ -56,22 +77,41 @@ pub fn private_level_filter_to_levels(
 
 pub use sqlformat;
 
+static QUERY_SPAN: &str = "db.query";
+
+#[pin_project(PinnedDrop)]
 pub struct QueryLogger<'q> {
     sql: &'q str,
     rows_returned: u64,
     rows_affected: u64,
     start: Instant,
     settings: LogSettings,
+    #[pin]
+    span: Option<tracing::span::EnteredSpan>,
 }
 
 impl<'q> QueryLogger<'q> {
     pub fn new(sql: &'q str, settings: LogSettings) -> Self {
+        let span = if let Some((tracing_level, _)) =
+            private_level_filter_to_levels(settings.statements_trace_level)
+        {
+            if private_tracing_dynamic_enabled!(target: "sqlx::query", tracing_level) {
+                let span = private_tracing_dynamic_span!(target: "sqlx::query", tracing_level, QUERY_SPAN, message = sql);
+                Some(span.entered())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Self {
             sql,
             rows_returned: 0,
             rows_affected: 0,
             start: Instant::now(),
             settings,
+            span,
         }
     }
 
@@ -83,7 +123,11 @@ impl<'q> QueryLogger<'q> {
         self.rows_affected += n;
     }
 
-    pub fn finish(&self) {
+    pub fn finish(&mut self) {
+        if let Some(guard) = self.span.take() {
+            drop(guard);
+        }
+
         let elapsed = self.start.elapsed();
 
         let was_slow = elapsed >= self.settings.slow_statements_duration;
@@ -153,8 +197,9 @@ impl<'q> QueryLogger<'q> {
     }
 }
 
-impl<'q> Drop for QueryLogger<'q> {
-    fn drop(&mut self) {
+#[pinned_drop]
+impl PinnedDrop for QueryLogger<'_> {
+    fn drop(mut self: Pin<&mut Self>) {
         self.finish();
     }
 }
