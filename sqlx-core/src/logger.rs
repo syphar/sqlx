@@ -1,10 +1,6 @@
 use crate::connection::LogSettings;
 use pin_project::{pin_project, pinned_drop};
-use std::{
-    pin::Pin,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::{pin::Pin, time::Instant};
 
 // Yes these look silly. `tracing` doesn't currently support dynamic levels
 // https://github.com/tokio-rs/tracing/issues/372
