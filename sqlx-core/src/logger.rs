@@ -83,7 +83,7 @@ pub struct QueryLogger<'q> {
     start: Instant,
     settings: LogSettings,
     #[pin]
-    span: Option<tracing::span::EnteredSpan>,
+    span: Option<Pin<Box<tracing::span::EnteredSpan>>>,
 }
 
 impl<'q> QueryLogger<'q> {
@@ -93,7 +93,7 @@ impl<'q> QueryLogger<'q> {
         {
             if private_tracing_dynamic_enabled!(target: "sqlx::query", tracing_level) {
                 let span = private_tracing_dynamic_span!(target: "sqlx::query", tracing_level, QUERY_SPAN, message = sql);
-                Some(span.entered())
+                Some(Box::pin(span.entered()))
             } else {
                 None
             }
