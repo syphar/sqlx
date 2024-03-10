@@ -19,7 +19,7 @@ use futures_core::Stream;
 use futures_util::{pin_mut, TryStreamExt};
 use sqlx_core::Either;
 use std::{borrow::Cow, sync::Arc};
-use tracing::instrument;
+use tracing::{info_span, instrument, Instrument};
 
 async fn prepare(
     conn: &mut PgConnection,
@@ -355,7 +355,8 @@ impl PgConnection {
             }
 
             Ok(())
-        })
+        }
+        .instrument(info_span!("db.fetch_results")))
     }
 }
 
