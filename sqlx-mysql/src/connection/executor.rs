@@ -23,6 +23,7 @@ use futures_core::stream::BoxStream;
 use futures_core::Stream;
 use futures_util::{pin_mut, TryStreamExt};
 use std::{borrow::Cow, sync::Arc};
+use tracing::instrument;
 
 impl MySqlConnection {
     async fn prepare_statement<'c>(
@@ -88,6 +89,7 @@ impl MySqlConnection {
         Ok((id, metadata))
     }
 
+    #[instrument(target="sqlx::query", name="db.query", skip_all, fields(message=sql))]
     #[allow(clippy::needless_lifetimes)]
     pub(crate) async fn run<'e, 'c: 'e, 'q: 'e>(
         &'c mut self,

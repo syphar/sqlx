@@ -19,6 +19,7 @@ use futures_core::Stream;
 use futures_util::{pin_mut, TryStreamExt};
 use sqlx_core::Either;
 use std::{borrow::Cow, sync::Arc};
+use tracing::instrument;
 
 async fn prepare(
     conn: &mut PgConnection,
@@ -191,6 +192,7 @@ impl PgConnection {
         Ok(statement)
     }
 
+    #[instrument(target="sqlx::query", name="db.query", skip_all, fields(message=query))]
     pub(crate) async fn run<'e, 'c: 'e, 'q: 'e>(
         &'c mut self,
         query: &'q str,
