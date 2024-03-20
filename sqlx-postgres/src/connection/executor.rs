@@ -355,8 +355,7 @@ impl PgConnection {
             }
 
             Ok(())
-        }
-        .instrument(info_span!("db.fetch_results")))
+        })
     }
 }
 
