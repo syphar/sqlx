@@ -1,6 +1,5 @@
 use crate::connection::LogSettings;
-use pin_project::{pin_project, pinned_drop};
-use std::{pin::Pin, time::Instant};
+use std::{sync::Mutex, time::Instant};
 
 // Yes these look silly. `tracing` doesn't currently support dynamic levels
 // https://github.com/tokio-rs/tracing/issues/372
@@ -75,15 +74,13 @@ pub use sqlformat;
 
 static QUERY_SPAN: &str = "db.query";
 
-#[pin_project(PinnedDrop)]
 pub struct QueryLogger<'q> {
     sql: &'q str,
     rows_returned: u64,
     rows_affected: u64,
     start: Instant,
     settings: LogSettings,
-    #[pin]
-    span: Option<Pin<Box<tracing::span::EnteredSpan>>>,
+    span: Option<Mutex<tracing::span::EnteredSpan>>,
 }
 
 impl<'q> QueryLogger<'q> {
@@ -93,7 +90,7 @@ impl<'q> QueryLogger<'q> {
         {
             if private_tracing_dynamic_enabled!(target: "sqlx::query", tracing_level) {
                 let span = private_tracing_dynamic_span!(target: "sqlx::query", tracing_level, QUERY_SPAN, message = sql);
-                Some(Box::pin(span.entered()))
+                Some(Mutex::new(span.entered()))
             } else {
                 None
             }
@@ -193,9 +190,8 @@ impl<'q> QueryLogger<'q> {
     }
 }
 
-#[pinned_drop]
-impl PinnedDrop for QueryLogger<'_> {
-    fn drop(mut self: Pin<&mut Self>) {
+impl Drop for QueryLogger<'_> {
+    fn drop(&mut self) {
         self.finish();
     }
 }

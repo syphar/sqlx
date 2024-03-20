@@ -3207,7 +3207,6 @@ dependencies = [
  "once_cell",
  "paste",
  "percent-encoding",
- "pin-project",
  "regex",
  "rust_decimal",
  "rustls",
