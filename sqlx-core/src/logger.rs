@@ -1,5 +1,5 @@
 use crate::connection::LogSettings;
-use std::{sync::Mutex, time::Instant};
+use std::time::Instant;
 
 // Yes these look silly. `tracing` doesn't currently support dynamic levels
 // https://github.com/tokio-rs/tracing/issues/372
@@ -80,7 +80,7 @@ pub struct QueryLogger<'q> {
     rows_affected: u64,
     start: Instant,
     settings: LogSettings,
-    span: Option<Mutex<tracing::span::EnteredSpan>>,
+    span: Option<tracing::span::EnteredSpan>,
 }
 
 impl<'q> QueryLogger<'q> {
@@ -90,7 +90,7 @@ impl<'q> QueryLogger<'q> {
         {
             if private_tracing_dynamic_enabled!(target: "sqlx::query", tracing_level) {
                 let span = private_tracing_dynamic_span!(target: "sqlx::query", tracing_level, QUERY_SPAN, message = sql);
-                Some(Mutex::new(span.entered()))
+                Some(span.entered())
             } else {
                 None
             }
